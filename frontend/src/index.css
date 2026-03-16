@@ -1,8 +1,14 @@
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap");
+
 :root {
   --cursor-x: 50vw;
   --cursor-y: 50vh;
+  --font-ui: "Manrope", "Segoe UI", sans-serif;
+  --font-display: "Bebas Neue", "Impact", sans-serif;
+  --font-heading: "Sora", "Trebuchet MS", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", monospace;
   color-scheme: light;
-  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.4;
   color: #0d3442;

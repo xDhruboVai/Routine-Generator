@@ -4,6 +4,7 @@
   padding: 24px 16px 40px;
   position: relative;
   isolation: isolate;
+  font-family: var(--font-ui);
 }
 
 .app-shell::before {
@@ -67,6 +68,20 @@
   overflow: hidden;
 }
 
+.hero-header h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  letter-spacing: 0.06em;
+  line-height: 0.95;
+}
+
+.hero-header p {
+  margin: 8px 0 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+
 .hero-header::after {
   content: "";
   position: absolute;
@@ -119,6 +134,8 @@
   margin: 0 0 10px;
   font-size: 1.2rem;
   color: #0b2a5e;
+  font-family: var(--font-heading);
+  letter-spacing: 0.01em;
 }
 
 .sub-panel {
@@ -130,6 +147,7 @@
 .sub-panel h3 {
   margin: 0 0 9px;
   color: #143a8f;
+  font-family: var(--font-heading);
 }
 
 .course-search-area {
@@ -148,6 +166,7 @@
   border-radius: 9px;
   font-size: 0.95rem;
   padding: 9px 11px;
+  font-family: var(--font-ui);
 }
 
 .course-search-area button,
@@ -443,6 +462,7 @@
 .result-header h3 {
   margin: 0;
   color: #0f3775;
+  font-family: var(--font-heading);
 }
 
 .result-header p {
@@ -518,6 +538,7 @@
   width: 100%;
   border-collapse: collapse;
   min-width: 980px;
+  font-family: var(--font-mono);
 }
 
 .slot-table th,
@@ -540,6 +561,7 @@
   font-weight: 700;
   font-size: 0.94rem;
   width: 220px;
+  letter-spacing: 0.01em;
 }
 
 .slot-cell {
@@ -589,6 +611,7 @@
 .slot-event-title {
   font-weight: 800;
   font-size: 0.8rem;
+  letter-spacing: 0.01em;
 }
 
 .slot-event-type {

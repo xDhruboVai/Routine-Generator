@@ -421,11 +421,8 @@ function App() {
       </div>
 
       <header className="hero-header">
-        <div className="hero-header-top">
-          <span className="hero-brand-pill">Routiner Khichuri</span>
-        </div>
-        <h1>Routiner Khichuri</h1>
-        <p>Build valid section combinations with constraint-based scheduling.</p>
+        <h1>ROUTINER KHICHURI</h1>
+        <p>Aj prochur routiner banabo.</p>
         <p className="source-last-updated-text">
           Source last updated: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
         </p>
