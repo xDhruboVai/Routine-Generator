@@ -229,6 +229,7 @@ function App() {
   const [downloadingRoutineKey, setDownloadingRoutineKey] = useState("");
   const routineCardRefs = useRef({});
   const resultsPanelRef = useRef(null);
+  const shouldScrollAfterPageChangeRef = useRef(false);
 
   useEffect(() => {
     async function fetchCourseCodes() {
@@ -424,6 +425,8 @@ function App() {
   }, [selectedCodes]);
 
   async function generateRoutine() {
+    queueResultsScroll();
+
     try {
       setErrorMessage("");
       setIsGenerating(true);
@@ -477,12 +480,14 @@ function App() {
       setRoutines(sorted);
       setRoutineStats(response.data.stats || null);
       setCurrentPage(1);
+      queueResultsScroll();
     } catch (error) {
       setRoutines([]);
       setRoutineStats(null);
       const message =
         error?.response?.data?.error || "Cannot generate schedule with these constraints";
       setErrorMessage(message);
+      queueResultsScroll();
     } finally {
       setIsGenerating(false);
     }
@@ -497,13 +502,33 @@ function App() {
       return;
     }
 
-    resultsPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    const targetTop = resultsPanelRef.current.getBoundingClientRect().top + window.scrollY - 10;
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+  }
+
+  function queueResultsScroll() {
+    requestAnimationFrame(() => {
+      scrollToResultsTop();
+    });
   }
 
   function changePage(nextPage) {
+    if (nextPage === currentPage) {
+      return;
+    }
+
+    shouldScrollAfterPageChangeRef.current = true;
     setCurrentPage(nextPage);
-    scrollToResultsTop();
   }
+
+  useEffect(() => {
+    if (!shouldScrollAfterPageChangeRef.current) {
+      return;
+    }
+
+    shouldScrollAfterPageChangeRef.current = false;
+    queueResultsScroll();
+  }, [currentPage]);
 
   function renderPaginationControls(positionClassName) {
     if (routines.length <= ROUTINES_PER_PAGE) {
