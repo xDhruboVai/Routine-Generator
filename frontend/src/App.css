@@ -622,20 +622,20 @@
 
 .slot-table th,
 .slot-table td {
-  border: 1px solid #5a6b8f;
+  border: 1px solid #a9bfdc;
 }
 
 .slot-table thead th {
-  background: #0f1c3a;
-  color: #ffffff;
+  background: #2a4f88;
+  color: #f8fbff;
   text-align: center;
   padding: 10px 8px;
   font-weight: 700;
 }
 
 .slot-label {
-  background: #101f3f;
-  color: #ffffff;
+  background: #3a5f95;
+  color: #f8fbff;
   text-align: center;
   font-weight: 700;
   font-size: 0.94rem;
@@ -644,7 +644,7 @@
 }
 
 .slot-cell {
-  background: #0d1a34;
+  background: #eaf2ff;
   min-width: 110px;
   height: 58px;
   padding: 4px;
