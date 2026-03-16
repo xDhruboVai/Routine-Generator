@@ -709,7 +709,7 @@ function App() {
             <input type="checkbox" checked={preferBreaks} onChange={(event) => setPreferBreaks(event.target.checked)} />
             Prefer routines with breaks between consecutive classes
           </label>
-          <p className="hint-text">Quiz er age pora lagbe</p>
+          <p className="hint-text">Quiz er age pora lage bhai.</p>
         </div>
 
         <button className="generate-button" type="button" disabled={selectedCodes.length === 0 || isGenerating} onClick={generateRoutine}>
