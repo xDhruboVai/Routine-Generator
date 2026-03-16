@@ -3,7 +3,7 @@ import axios from "axios";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const DAY_ORDER = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "SATURDAY"];
+const DAY_ORDER = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const TIME_SLOTS = [
   { label: "08:00 AM-09:20 AM", startTime: "08:00:00", endTime: "09:20:00" },
   { label: "09:30 AM-10:50 AM", startTime: "09:30:00", endTime: "10:50:00" },
