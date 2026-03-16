@@ -1,6 +1,6 @@
 # Routiner Khichuri
 
-##https://routiner-khichuri.vercel.app/
+https://routiner-khichuri.vercel.app/
 
 ## Run locally
 
