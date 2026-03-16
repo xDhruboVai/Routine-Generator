@@ -228,6 +228,7 @@ function App() {
   const [sourceLastUpdated, setSourceLastUpdated] = useState(null);
   const [downloadingRoutineKey, setDownloadingRoutineKey] = useState("");
   const routineCardRefs = useRef({});
+  const resultsPanelRef = useRef(null);
 
   useEffect(() => {
     async function fetchCourseCodes() {
@@ -491,6 +492,19 @@ function App() {
   const pageStartIndex = (currentPage - 1) * ROUTINES_PER_PAGE;
   const pageRoutines = routines.slice(pageStartIndex, pageStartIndex + ROUTINES_PER_PAGE);
 
+  function scrollToResultsTop() {
+    if (!resultsPanelRef.current) {
+      return;
+    }
+
+    resultsPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function changePage(nextPage) {
+    setCurrentPage(nextPage);
+    scrollToResultsTop();
+  }
+
   function renderPaginationControls(positionClassName) {
     if (routines.length <= ROUTINES_PER_PAGE) {
       return null;
@@ -503,7 +517,7 @@ function App() {
           className="page-btn"
           disabled={currentPage === 1}
           onClick={() => {
-            setCurrentPage((previous) => Math.max(1, previous - 1));
+            changePage(Math.max(1, currentPage - 1));
           }}
         >
           Previous
@@ -515,7 +529,7 @@ function App() {
             type="button"
             className={`page-btn page-number ${page === currentPage ? "is-active" : ""}`}
             onClick={() => {
-              setCurrentPage(page);
+              changePage(page);
             }}
           >
             {page}
@@ -527,7 +541,7 @@ function App() {
           className="page-btn"
           disabled={currentPage === totalPages}
           onClick={() => {
-            setCurrentPage((previous) => Math.min(totalPages, previous + 1));
+            changePage(Math.min(totalPages, currentPage + 1));
           }}
         >
           Next
@@ -719,7 +733,7 @@ function App() {
 
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
 
-      <section className="panel results-panel">
+      <section className="panel results-panel" ref={resultsPanelRef}>
         <h2>Results</h2>
         {routines.length === 0 && !errorMessage && <p className="hint-text">Generate a routine to view schedules.</p>}
 
