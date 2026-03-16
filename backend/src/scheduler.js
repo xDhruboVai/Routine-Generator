@@ -262,42 +262,100 @@ function buildDayUsage(selectedSections) {
 function calculateBreakPenalty(dayToMeetings, breakPreference) {
   if (!breakPreference?.enabled) return 0;
 
-  const minBreakMinutes = 10;
-  const maxBackToBackMinutes = 180;
-  const penaltyWeight = 1;
+  const consecutiveTheoryGapMinutes = 15;
+  const preferredBreakAfterTwoTheoryMinutes = 90;
+  const singleSlotTheoryMaxDurationMinutes = 100;
+  const extraTheoryInStreakPenalty = 2;
 
   let penalty = 0;
+
+  function isSingleSlotTheory(meeting) {
+    if (!meeting || meeting.source !== "CLASS") {
+      return false;
+    }
+
+    const duration = meeting.endMinutes - meeting.startMinutes;
+    return duration > 0 && duration <= singleSlotTheoryMaxDurationMinutes;
+  }
 
   dayToMeetings.forEach((meetings) => {
     if (meetings.length < 2) return;
 
-    let streakStart = meetings[0].startMinutes;
-    let streakEnd = meetings[0].endMinutes;
+    let theoryStreakLength = 0;
+    let previousTheoryMeeting = null;
 
-    for (let i = 1; i < meetings.length; i += 1) {
-      const current = meetings[i];
-      const gap = current.startMinutes - streakEnd;
+    for (let i = 0; i < meetings.length; i += 1) {
+      const currentMeeting = meetings[i];
 
-      if (gap < minBreakMinutes) {
-        streakEnd = Math.max(streakEnd, current.endMinutes);
+      if (!isSingleSlotTheory(currentMeeting)) {
+        theoryStreakLength = 0;
+        previousTheoryMeeting = null;
+        continue;
+      }
+
+      if (!previousTheoryMeeting) {
+        theoryStreakLength = 1;
+        previousTheoryMeeting = currentMeeting;
+        continue;
+      }
+
+      const gapMinutes = currentMeeting.startMinutes - previousTheoryMeeting.endMinutes;
+
+      if (gapMinutes <= consecutiveTheoryGapMinutes) {
+        theoryStreakLength += 1;
+        if (theoryStreakLength > 2) {
+          penalty += (theoryStreakLength - 2) * extraTheoryInStreakPenalty;
+        }
       } else {
-        const streakDuration = streakEnd - streakStart;
-        if (streakDuration > maxBackToBackMinutes) {
-          penalty += ((streakDuration - maxBackToBackMinutes) / 60) * penaltyWeight;
+        // After two consecutive single-slot theory classes, prefer at least a 1.5-hour break.
+        if (theoryStreakLength >= 2 && gapMinutes < preferredBreakAfterTwoTheoryMinutes) {
+          penalty += (preferredBreakAfterTwoTheoryMinutes - gapMinutes) / 45;
         }
 
-        streakStart = current.startMinutes;
-        streakEnd = current.endMinutes;
+        theoryStreakLength = 1;
       }
-    }
 
-    const streakDuration = streakEnd - streakStart;
-    if (streakDuration > maxBackToBackMinutes) {
-      penalty += ((streakDuration - maxBackToBackMinutes) / 60) * penaltyWeight;
+      previousTheoryMeeting = currentMeeting;
     }
   });
 
   return penalty;
+}
+
+function calculateIdleGapPenalty(dayToMeetings) {
+  const freeGapGraceMinutes = 15;
+  let penaltyHours = 0;
+
+  dayToMeetings.forEach((meetings) => {
+    if (!Array.isArray(meetings) || meetings.length < 2) return;
+
+    for (let i = 1; i < meetings.length; i += 1) {
+      const previous = meetings[i - 1];
+      const current = meetings[i];
+      const gapMinutes = current.startMinutes - previous.endMinutes;
+      if (gapMinutes <= 0) continue;
+
+      const penalizedGapMinutes = Math.max(0, gapMinutes - freeGapGraceMinutes);
+      penaltyHours += penalizedGapMinutes / 60;
+    }
+  });
+
+  return penaltyHours;
+}
+
+function calculateDailySpanHours(dayToMeetings) {
+  let totalSpanHours = 0;
+
+  dayToMeetings.forEach((meetings) => {
+    if (!Array.isArray(meetings) || meetings.length === 0) return;
+    const firstStart = meetings[0].startMinutes;
+    const lastEnd = meetings[meetings.length - 1].endMinutes;
+    if (lastEnd > firstStart) {
+      totalSpanHours += (lastEnd - firstStart) / 60;
+    }
+  });
+
+  return totalSpanHours;
 }
 
 function evaluateSchedule(selectedSections, preferences) {
@@ -313,6 +371,9 @@ function evaluateSchedule(selectedSections, preferences) {
 
   const avgDailyHours = totalDays === 0 ? 0 : totalHours / totalDays;
   const breakPenalty = calculateBreakPenalty(dayToMeetings, preferences.breakPreference);
+  const idleGapPenalty = calculateIdleGapPenalty(dayToMeetings);
+  const totalDailySpanHours = calculateDailySpanHours(dayToMeetings);
+  const breakPreferenceEnabled = Boolean(preferences.breakPreference?.enabled);
 
   const priority = String(preferences.priority || "MIN_DAYS").toUpperCase();
   const preferredDaysCount = Array.isArray(preferences.allowedDays) && preferences.allowedDays.length > 0
@@ -324,6 +385,10 @@ function evaluateSchedule(selectedSections, preferences) {
     (priority === "MIN_DAYS" ? totalDays * 34 : totalDays * 14) +
     (priority === "MIN_DAILY_HOURS" ? avgDailyHours * 24 : avgDailyHours * 10) +
     totalHours * 2 +
+    (priority === "MIN_DAYS"
+      ? idleGapPenalty * (breakPreferenceEnabled ? 8 : 28)
+      : idleGapPenalty * 10) +
+    (priority === "MIN_DAYS" ? totalDailySpanHours * 6 : totalDailySpanHours * 2) +
     breakPenalty * 30 +
     dayUtilization * 12;
 
@@ -336,13 +401,15 @@ function evaluateSchedule(selectedSections, preferences) {
       totalHours,
       avgDailyHours,
       breakPenalty,
+      idleGapPenalty,
+      totalDailySpanHours,
       score,
     },
     score,
   };
 }
 
-function compareSchedulesDescending(a, b, priority) {
+function compareSchedulesDescending(a, b, priority, breakPreferenceEnabled) {
   if (b.score !== a.score) {
     return b.score - a.score;
   }
@@ -353,6 +420,26 @@ function compareSchedulesDescending(a, b, priority) {
     }
   } else if (a.metrics.totalDays !== b.metrics.totalDays) {
     return a.metrics.totalDays - b.metrics.totalDays;
+  } else if (breakPreferenceEnabled) {
+    if (a.metrics.breakPenalty !== b.metrics.breakPenalty) {
+      return a.metrics.breakPenalty - b.metrics.breakPenalty;
+    }
+
+    if (a.metrics.idleGapPenalty !== b.metrics.idleGapPenalty) {
+      return a.metrics.idleGapPenalty - b.metrics.idleGapPenalty;
+    }
+
+    if (a.metrics.totalDailySpanHours !== b.metrics.totalDailySpanHours) {
+      return a.metrics.totalDailySpanHours - b.metrics.totalDailySpanHours;
+    }
+  } else {
+    if (a.metrics.idleGapPenalty !== b.metrics.idleGapPenalty) {
+      return a.metrics.idleGapPenalty - b.metrics.idleGapPenalty;
+    }
+
+    if (a.metrics.totalDailySpanHours !== b.metrics.totalDailySpanHours) {
+      return a.metrics.totalDailySpanHours - b.metrics.totalDailySpanHours;
+    }
   }
 
   if (a.metrics.breakPenalty !== b.metrics.breakPenalty) {
@@ -738,7 +825,12 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
   }
 
   validSchedules.sort((a, b) =>
-    compareSchedulesDescending(a, b, String(preferences.priority || "MIN_DAYS").toUpperCase()),
+    compareSchedulesDescending(
+      a,
+      b,
+      String(preferences.priority || "MIN_DAYS").toUpperCase(),
+      Boolean(preferences.breakPreference?.enabled),
+    ),
   );
 
   const routines = validSchedules.map((schedule) => ({

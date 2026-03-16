@@ -20,6 +20,18 @@ function toMinutes(value) {
   return hours * 60 + minutes;
 }
 
+function formatHoursAsHourMinute(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return "0 hours 0 minutes";
+  }
+
+  const roundedToThirtyMinutes = Math.round((numeric * 60) / 30) * 30;
+  const hours = Math.floor(roundedToThirtyMinutes / 60);
+  const minutes = roundedToThirtyMinutes % 60;
+  return `${hours} hours ${minutes} minutes`;
+}
+
 function normalizeMeetingsFromSections(sections) {
   return sections.flatMap((section, sectionIndex) => {
     const schedule = section.sectionSchedule || {};
@@ -203,7 +215,7 @@ function App() {
   const [facultyPrefsByCourse, setFacultyPrefsByCourse] = useState({});
   const [facultyOptionsByCourse, setFacultyOptionsByCourse] = useState({});
 
-  const [preferBreaks, setPreferBreaks] = useState(true);
+  const [preferBreaks, setPreferBreaks] = useState(false);
   const [ignoreFilledSections, setIgnoreFilledSections] = useState(true);
   const [ignoredSlotLabels, setIgnoredSlotLabels] = useState([]);
 
@@ -735,7 +747,7 @@ function App() {
               <div className="result-header">
                 <h3>Routine #{pageStartIndex + index + 1}</h3>
                 <p>
-                  Score: <strong>{Math.round(routine.metrics.score || 0)}</strong> | Days: <strong>{routine.metrics.totalDays}</strong> | Total Hours: <strong>{routine.metrics.totalHours.toFixed(2)}</strong> | Avg Daily: <strong>{routine.metrics.avgDailyHours.toFixed(2)}</strong> | Break Penalty: <strong>{(routine.metrics.breakPenalty || 0).toFixed(2)}</strong>
+                  Score: <strong>{Math.round(routine.metrics.score || 0)}</strong> | Days: <strong>{routine.metrics.totalDays}</strong> | Avg Daily: <strong>{formatHoursAsHourMinute(routine.metrics.avgDailyHours)}</strong>
                 </p>
                 <button
                   type="button"
