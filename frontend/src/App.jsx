@@ -212,6 +212,7 @@ function App() {
   const [routineStats, setRoutineStats] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState("");
+  const [sourceLastUpdated, setSourceLastUpdated] = useState(null);
 
   useEffect(() => {
     async function fetchCourseCodes() {
@@ -231,6 +232,29 @@ function App() {
 
   useEffect(() => {
     document.title = "Routiner Khichuri";
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchHealthStatus() {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/health`);
+        if (!isMounted) return;
+        setSourceLastUpdated(response.data?.sourceMetadataLastUpdated || null);
+      } catch {
+        if (!isMounted) return;
+        setSourceLastUpdated(null);
+      }
+    }
+
+    fetchHealthStatus();
+    const intervalId = setInterval(fetchHealthStatus, 120000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
@@ -402,6 +426,9 @@ function App() {
         </div>
         <h1>Routiner Khichuri</h1>
         <p>Build valid section combinations with constraint-based scheduling.</p>
+        <p className="source-last-updated-text">
+          Source last updated: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
+        </p>
       </header>
 
       <section className="panel">

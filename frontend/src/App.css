@@ -339,6 +339,11 @@
   color: #4b6083;
 }
 
+.source-last-updated-text {
+  margin: 6px 0 0;
+  color: #ffffff;
+}
+
 .results-stack {
   display: grid;
   gap: 12px;

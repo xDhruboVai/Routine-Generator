@@ -52,7 +52,7 @@ async function refreshCourseCatalog(reason = "interval") {
     sourceHealth.lastRefreshError = null;
 
     console.log(
-      `Catalog refresh (${reason}) succeeded. Sections in memory: ${inMemoryCatalog.courses.length}`,
+      `Catalog refresh (${reason}) succeeded. Sections in memory: ${inMemoryCatalog.courses.length}. Source lastUpdated: ${inMemoryCatalog.metadata?.lastUpdated || "N/A"}`,
     );
   } catch (error) {
     catalogReady = false;
@@ -93,6 +93,7 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: catalogReady,
     sourceReachable: sourceHealth.sourceReachable,
+    sourceMetadataLastUpdated: inMemoryCatalog.metadata?.lastUpdated || null,
     lastRefreshAttemptAt: sourceHealth.lastRefreshAttemptAt,
     lastSuccessfulLoadAt: sourceHealth.lastSuccessfulLoadAt,
     lastRefreshError: sourceHealth.lastRefreshError,
