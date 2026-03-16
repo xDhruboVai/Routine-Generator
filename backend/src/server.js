@@ -4,7 +4,10 @@ const axios = require("axios");
 const { generateRoutines, MAX_REQUESTED_COURSES } = require("./scheduler");
 
 const PORT = process.env.PORT || 4000;
-const COURSE_SOURCE_URL = "https://usis-cdn.eniamza.com/connect-migrate.json";
+const COURSE_SOURCE_URL =
+  process.env.COURSE_SOURCE_URL || "https://usis-cdn.eniamza.com/connect-migrate.json";
+const CATALOG_FETCH_TIMEOUT_MS = Number(process.env.CATALOG_FETCH_TIMEOUT_MS || 30000);
+const CATALOG_REFRESH_INTERVAL_MS = Number(process.env.CATALOG_REFRESH_INTERVAL_MS || 120000);
 
 let inMemoryCatalog = {
   metadata: {},
@@ -12,15 +15,73 @@ let inMemoryCatalog = {
   loadedAt: null,
 };
 
-async function loadCourseCatalog() {
-  const response = await axios.get(COURSE_SOURCE_URL, { timeout: 30000 });
-  const payload = response.data || {};
+let catalogReady = false;
+let refreshInProgress = false;
+let sourceHealth = {
+  sourceReachable: false,
+  lastRefreshAttemptAt: null,
+  lastSuccessfulLoadAt: null,
+  lastRefreshError: null,
+};
 
+function applyCatalog(payload) {
   inMemoryCatalog = {
     metadata: payload.metadata || {},
     courses: Array.isArray(payload.courses) ? payload.courses : [],
     loadedAt: new Date().toISOString(),
   };
+}
+
+async function refreshCourseCatalog(reason = "interval") {
+  if (refreshInProgress) {
+    return;
+  }
+
+  refreshInProgress = true;
+  sourceHealth.lastRefreshAttemptAt = new Date().toISOString();
+
+  try {
+    const response = await axios.get(COURSE_SOURCE_URL, { timeout: CATALOG_FETCH_TIMEOUT_MS });
+    const payload = response.data || {};
+
+    applyCatalog(payload);
+
+    catalogReady = true;
+    sourceHealth.sourceReachable = true;
+    sourceHealth.lastSuccessfulLoadAt = inMemoryCatalog.loadedAt;
+    sourceHealth.lastRefreshError = null;
+
+    console.log(
+      `Catalog refresh (${reason}) succeeded. Sections in memory: ${inMemoryCatalog.courses.length}`,
+    );
+  } catch (error) {
+    catalogReady = false;
+    sourceHealth.sourceReachable = false;
+    sourceHealth.lastRefreshError = String(error?.message || "Unknown source fetch error");
+
+    console.error(
+      `Catalog refresh (${reason}) failed: ${sourceHealth.lastRefreshError}`,
+    );
+  } finally {
+    refreshInProgress = false;
+  }
+}
+
+function startCatalogRefreshLoop() {
+  setInterval(() => {
+    refreshCourseCatalog("poll");
+  }, CATALOG_REFRESH_INTERVAL_MS);
+}
+
+function requireCatalogReady(req, res, next) {
+  if (catalogReady && Array.isArray(inMemoryCatalog.courses) && inMemoryCatalog.courses.length > 0) {
+    next();
+    return;
+  }
+
+  res.status(503).json({
+    error: "Course catalog is temporarily unavailable. Please try again shortly.",
+  });
 }
 
 const app = express();
@@ -30,12 +91,17 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (req, res) => {
   res.json({
-    ok: true,
+    ok: catalogReady,
+    sourceReachable: sourceHealth.sourceReachable,
+    lastRefreshAttemptAt: sourceHealth.lastRefreshAttemptAt,
+    lastSuccessfulLoadAt: sourceHealth.lastSuccessfulLoadAt,
+    lastRefreshError: sourceHealth.lastRefreshError,
     loadedAt: inMemoryCatalog.loadedAt,
     courseCount: inMemoryCatalog.courses.length,
   });
 });
 
+app.use("/api/course-codes", requireCatalogReady);
 app.get("/api/course-codes", (req, res) => {
   const uniqueCodes = [...new Set(inMemoryCatalog.courses.map((course) => String(course.courseCode || "").toUpperCase()))]
     .filter(Boolean)
@@ -47,6 +113,7 @@ app.get("/api/course-codes", (req, res) => {
   });
 });
 
+app.use("/api/course-faculties", requireCatalogReady);
 app.get("/api/course-faculties", (req, res) => {
   const rawCodes = String(req.query.courseCodes || "");
   const requestedCodes = rawCodes
@@ -80,6 +147,7 @@ app.get("/api/course-faculties", (req, res) => {
   });
 });
 
+app.use("/api/generate-routine", requireCatalogReady);
 app.post("/api/generate-routine", (req, res) => {
   try {
     const { courseCodes, preferences } = req.body || {};
@@ -117,17 +185,11 @@ app.post("/api/generate-routine", (req, res) => {
 });
 
 (async () => {
-  try {
-    console.log("Loading course catalog into memory...");
-    await loadCourseCatalog();
-    console.log(`Catalog loaded. Sections in memory: ${inMemoryCatalog.courses.length}`);
+  console.log("Loading course catalog into memory...");
+  await refreshCourseCatalog("startup");
+  startCatalogRefreshLoop();
 
-    app.listen(PORT, () => {
-      console.log(`Routiner Khichuri backend listening on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error("Failed to load course catalog on startup.");
-    console.error(error);
-    process.exit(1);
-  }
+  app.listen(PORT, () => {
+    console.log(`Routiner Khichuri backend listening on port ${PORT}`);
+  });
 })();
