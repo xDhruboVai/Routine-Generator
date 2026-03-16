@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -205,6 +205,7 @@ function App() {
 
   const [preferBreaks, setPreferBreaks] = useState(true);
   const [ignoreFilledSections, setIgnoreFilledSections] = useState(true);
+  const [ignoredSlotLabels, setIgnoredSlotLabels] = useState([]);
 
   const [loadingCodes, setLoadingCodes] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -213,6 +214,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState("");
   const [sourceLastUpdated, setSourceLastUpdated] = useState(null);
+  const [downloadingRoutineKey, setDownloadingRoutineKey] = useState("");
+  const routineCardRefs = useRef({});
 
   useEffect(() => {
     async function fetchCourseCodes() {
@@ -313,9 +316,15 @@ function App() {
       const current = previous[courseCode] || { preferredList: [], avoidList: [] };
       const existing = Array.isArray(current[field]) ? current[field] : [];
       const normalizedFaculty = String(faculty || "").toUpperCase();
+      const otherField = field === "preferredList" ? "avoidList" : "preferredList";
+      const otherExisting = Array.isArray(current[otherField]) ? current[otherField] : [];
       const nextValues = existing.includes(normalizedFaculty)
         ? existing.filter((value) => value !== normalizedFaculty)
         : [...existing, normalizedFaculty];
+
+      const nextOtherValues = nextValues.includes(normalizedFaculty)
+        ? otherExisting.filter((value) => value !== normalizedFaculty)
+        : otherExisting;
 
       return {
         ...previous,
@@ -323,9 +332,63 @@ function App() {
           preferredList: current.preferredList || [],
           avoidList: current.avoidList || [],
           [field]: nextValues,
+          [otherField]: nextOtherValues,
         },
       };
     });
+  }
+
+  function toggleIgnoredSlot(slotLabel) {
+    setIgnoredSlotLabels((previous) => {
+      if (previous.includes(slotLabel)) {
+        return previous.filter((label) => label !== slotLabel);
+      }
+
+      return [...previous, slotLabel];
+    });
+  }
+
+  function registerRoutineCardRef(routineKey, node) {
+    if (node) {
+      routineCardRefs.current[routineKey] = node;
+      return;
+    }
+
+    delete routineCardRefs.current[routineKey];
+  }
+
+  async function downloadRoutineImage(routineKey, routineNumber) {
+    const cardNode = routineCardRefs.current[routineKey];
+    if (!cardNode) {
+      setErrorMessage("Could not find this routine card to download.");
+      return;
+    }
+
+    try {
+      setDownloadingRoutineKey(routineKey);
+      const moduleName = "html-to-image";
+      const imageModule = await import(/* @vite-ignore */ moduleName);
+      const toPng = imageModule?.toPng;
+
+      if (typeof toPng !== "function") {
+        throw new Error("Image export function is unavailable");
+      }
+
+      const dataUrl = await toPng(cardNode, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+      });
+
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `routine-${routineNumber}.png`;
+      link.click();
+    } catch {
+      setErrorMessage("Could not download this routine image right now.");
+    } finally {
+      setDownloadingRoutineKey("");
+    }
   }
 
   useEffect(() => {
@@ -379,6 +442,10 @@ function App() {
           maxDaysPerWeek,
           allowedDays,
           priority,
+          ignoredTimeSlots: TIME_SLOTS.filter((slot) => ignoredSlotLabels.includes(slot.label)).map((slot) => ({
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          })),
           facultyPreference: {
             mustHaveByCourse,
             avoidByCourse,
@@ -411,6 +478,51 @@ function App() {
   const totalPages = Math.max(1, Math.ceil(routines.length / ROUTINES_PER_PAGE));
   const pageStartIndex = (currentPage - 1) * ROUTINES_PER_PAGE;
   const pageRoutines = routines.slice(pageStartIndex, pageStartIndex + ROUTINES_PER_PAGE);
+
+  function renderPaginationControls(positionClassName) {
+    if (routines.length <= ROUTINES_PER_PAGE) {
+      return null;
+    }
+
+    return (
+      <div className={`results-pagination ${positionClassName}`}>
+        <button
+          type="button"
+          className="page-btn"
+          disabled={currentPage === 1}
+          onClick={() => {
+            setCurrentPage((previous) => Math.max(1, previous - 1));
+          }}
+        >
+          Previous
+        </button>
+
+        {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+          <button
+            key={page}
+            type="button"
+            className={`page-btn page-number ${page === currentPage ? "is-active" : ""}`}
+            onClick={() => {
+              setCurrentPage(page);
+            }}
+          >
+            {page}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          className="page-btn"
+          disabled={currentPage === totalPages}
+          onClick={() => {
+            setCurrentPage((previous) => Math.min(totalPages, previous + 1));
+          }}
+        >
+          Next
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -476,7 +588,10 @@ function App() {
 
                 <div className="faculty-option-list">
                   {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                    <label key={`${code}-preferred-${faculty}`} className="faculty-option-item">
+                    <label
+                      key={`${code}-preferred-${faculty}`}
+                      className={`faculty-option-item ${(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty) ? "is-preferred" : ""}`}
+                    >
                       <input
                         type="checkbox"
                         checked={(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty)}
@@ -489,7 +604,10 @@ function App() {
 
                 <div className="faculty-option-list">
                   {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                    <label key={`${code}-avoid-${faculty}`} className="faculty-option-item">
+                    <label
+                      key={`${code}-avoid-${faculty}`}
+                      className={`faculty-option-item ${(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty) ? "is-avoided" : ""}`}
+                    >
                       <input
                         type="checkbox"
                         checked={(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty)}
@@ -543,6 +661,26 @@ function App() {
         </div>
 
         <div className="sub-panel">
+          <h3>Ignored Time Slots</h3>
+          <div className="ignored-slot-grid">
+            {TIME_SLOTS.map((slot) => {
+              const isSelected = ignoredSlotLabels.includes(slot.label);
+              return (
+                <button
+                  key={slot.label}
+                  type="button"
+                  className={`ignored-slot-toggle ${isSelected ? "is-selected" : ""}`}
+                  onClick={() => toggleIgnoredSlot(slot.label)}
+                >
+                  {slot.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="hint-text">Selected slots are blocked globally across all class days while generating routines.</p>
+        </div>
+
+        <div className="sub-panel">
           <h3>Section Availability</h3>
           <label className="checkbox-label">
             <input
@@ -587,14 +725,28 @@ function App() {
           </div>
         )}
 
+        {renderPaginationControls("results-pagination-top")}
+
         <div className="results-stack">
           {pageRoutines.map((routine, index) => (
-            <article key={`routine-${pageStartIndex + index}`} className="result-card">
+            <article
+              key={`routine-${pageStartIndex + index}`}
+              className="result-card"
+              ref={(node) => registerRoutineCardRef(`routine-${pageStartIndex + index}`, node)}
+            >
               <div className="result-header">
                 <h3>Routine #{pageStartIndex + index + 1}</h3>
                 <p>
-                  Score: <strong>{Math.round(routine.metrics.score || 0)}</strong> | Days: <strong>{routine.metrics.totalDays}</strong> | Total Hours: <strong>{routine.metrics.totalHours.toFixed(2)}</strong> | Avg Daily: <strong>{routine.metrics.avgDailyHours.toFixed(2)}</strong>
+                  Score: <strong>{Math.round(routine.metrics.score || 0)}</strong> | Days: <strong>{routine.metrics.totalDays}</strong> | Total Hours: <strong>{routine.metrics.totalHours.toFixed(2)}</strong> | Avg Daily: <strong>{routine.metrics.avgDailyHours.toFixed(2)}</strong> | Break Penalty: <strong>{(routine.metrics.breakPenalty || 0).toFixed(2)}</strong>
                 </p>
+                <button
+                  type="button"
+                  className="download-routine-button"
+                  disabled={downloadingRoutineKey === `routine-${pageStartIndex + index}`}
+                  onClick={() => downloadRoutineImage(`routine-${pageStartIndex + index}`, pageStartIndex + index + 1)}
+                >
+                  {downloadingRoutineKey === `routine-${pageStartIndex + index}` ? "Preparing image..." : "Download Picture"}
+                </button>
               </div>
 
               <WeeklyCalendar sections={routine.sections} />
@@ -602,44 +754,7 @@ function App() {
           ))}
         </div>
 
-        {routines.length > ROUTINES_PER_PAGE && (
-          <div className="results-pagination">
-            <button
-              type="button"
-              className="page-btn"
-              disabled={currentPage === 1}
-              onClick={() => {
-                setCurrentPage((previous) => Math.max(1, previous - 1));
-              }}
-            >
-              Previous
-            </button>
-
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-              <button
-                key={page}
-                type="button"
-                className={`page-btn page-number ${page === currentPage ? "is-active" : ""}`}
-                onClick={() => {
-                  setCurrentPage(page);
-                }}
-              >
-                {page}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              className="page-btn"
-              disabled={currentPage === totalPages}
-              onClick={() => {
-                setCurrentPage((previous) => Math.min(totalPages, previous + 1));
-              }}
-            >
-              Next
-            </button>
-          </div>
-        )}
+        {renderPaginationControls("results-pagination-bottom")}
       </section>
     </div>
   );

@@ -11,6 +11,7 @@ const DAY_ORDER = [
 const MAX_REQUESTED_COURSES = Number(process.env.MAX_REQUESTED_COURSES || 5);
 const SEARCH_TIMEOUT_MS = Number(process.env.SCHEDULER_SEARCH_TIMEOUT_MS || 2000);
 const MAX_RETURNED_ROUTINES = Number(process.env.SCHEDULER_MAX_RESULTS || 100);
+const normalizedMeetingCache = new WeakMap();
 
 function toMinutes(timeValue) {
   if (!timeValue || typeof timeValue !== "string") return null;
@@ -48,11 +49,80 @@ function normalizeMeetings(section) {
 }
 
 function getNormalizedMeetings(section) {
-  if (!section.__normalizedMeetings) {
-    section.__normalizedMeetings = normalizeMeetings(section);
+  if (!section || typeof section !== "object") {
+    return [];
   }
 
-  return section.__normalizedMeetings;
+  if (!normalizedMeetingCache.has(section)) {
+    normalizedMeetingCache.set(section, normalizeMeetings(section));
+  }
+
+  return normalizedMeetingCache.get(section) || [];
+}
+
+function normalizeIgnoredTimeSlots(rawIgnoredTimeSlots) {
+  if (!Array.isArray(rawIgnoredTimeSlots)) {
+    return [];
+  }
+
+  const normalized = rawIgnoredTimeSlots
+    .map((slot) => {
+      const startTime = String(slot?.startTime || "");
+      const endTime = String(slot?.endTime || "");
+      const startMinutes = toMinutes(startTime);
+      const endMinutes = toMinutes(endTime);
+
+      if (startMinutes == null || endMinutes == null || startMinutes >= endMinutes) {
+        return null;
+      }
+
+      return {
+        startTime,
+        endTime,
+        startMinutes,
+        endMinutes,
+      };
+    })
+    .filter(Boolean);
+
+  const deduplicated = [];
+  const seenKeys = new Set();
+
+  normalized.forEach((slot) => {
+    const key = `${slot.startMinutes}-${slot.endMinutes}`;
+    if (seenKeys.has(key)) {
+      return;
+    }
+
+    seenKeys.add(key);
+    deduplicated.push(slot);
+  });
+
+  return deduplicated;
+}
+
+function sectionFitsIgnoredTimeSlots(section, ignoredTimeSlots) {
+  if (!Array.isArray(ignoredTimeSlots) || ignoredTimeSlots.length === 0) {
+    return true;
+  }
+
+  const meetings = getNormalizedMeetings(section);
+  for (const meeting of meetings) {
+    for (const ignoredSlot of ignoredTimeSlots) {
+      if (
+        minutesOverlap(
+          meeting.startMinutes,
+          meeting.endMinutes,
+          ignoredSlot.startMinutes,
+          ignoredSlot.endMinutes,
+        )
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 function normalizeExam(examDate, startTime, endTime) {
@@ -371,6 +441,10 @@ function buildCandidateSectionsByCourse(courses, requestedCourseCodes, preferenc
       return;
     }
 
+    if (!sectionFitsIgnoredTimeSlots(section, preferences.ignoredTimeSlots)) {
+      return;
+    }
+
     byCourse.get(code).push(section);
   });
 
@@ -563,6 +637,7 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
       : [],
     facultyPreference: rawPreferences.facultyPreference || {},
     breakPreference: rawPreferences.breakPreference || {},
+    ignoredTimeSlots: normalizeIgnoredTimeSlots(rawPreferences.ignoredTimeSlots),
     ignoreFilledSections: rawPreferences.ignoreFilledSections !== false,
     priority: rawPreferences.priority || "MIN_DAYS",
   };
