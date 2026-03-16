@@ -1,0 +1,7 @@
+
+> backend@1.0.0 start
+> node src/server.js
+
+Loading course catalog into memory...
+Catalog loaded. Sections in memory: 2364
+Routine Generator backend listening on port 4000
