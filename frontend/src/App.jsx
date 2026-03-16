@@ -3,7 +3,7 @@ import axios from "axios";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const DAY_ORDER = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const DAY_ORDER = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "SATURDAY"];
 const TIME_SLOTS = [
   { label: "08:00 AM-09:20 AM", startTime: "08:00:00", endTime: "09:20:00" },
   { label: "09:30 AM-10:50 AM", startTime: "09:30:00", endTime: "10:50:00" },
@@ -366,8 +366,7 @@ function App() {
 
     try {
       setDownloadingRoutineKey(routineKey);
-      const moduleName = "html-to-image";
-      const imageModule = await import(/* @vite-ignore */ moduleName);
+      const imageModule = await import("html-to-image");
       const toPng = imageModule?.toPng;
 
       if (typeof toPng !== "function") {
@@ -384,7 +383,8 @@ function App() {
       link.href = dataUrl;
       link.download = `routine-${routineNumber}.png`;
       link.click();
-    } catch {
+    } catch (error) {
+      console.error("Routine image download failed", error);
       setErrorMessage("Could not download this routine image right now.");
     } finally {
       setDownloadingRoutineKey("");
@@ -642,7 +642,6 @@ function App() {
               );
             })}
           </div>
-          <p className="hint-text">Only sections scheduled within selected days will be considered.</p>
         </div>
 
         <div className="settings-grid">
@@ -677,7 +676,7 @@ function App() {
               );
             })}
           </div>
-          <p className="hint-text">Selected slots are blocked globally across all class days while generating routines.</p>
+          <p className="hint-text">8 tar class asholei korba?</p>
         </div>
 
         <div className="sub-panel">
@@ -690,7 +689,6 @@ function App() {
             />
             Ignore filled sections
           </label>
-          <p className="hint-text">Default is enabled. Full means consumed seats are greater than or equal to capacity.</p>
         </div>
 
         <div className="sub-panel">
@@ -699,7 +697,7 @@ function App() {
             <input type="checkbox" checked={preferBreaks} onChange={(event) => setPreferBreaks(event.target.checked)} />
             Prefer routines with breaks between consecutive classes
           </label>
-          <p className="hint-text">Break scoring is automatically calculated based on the fixed 1 hour 20 minute class slots.</p>
+          <p className="hint-text">Quiz er age pora lagbe</p>
         </div>
 
         <button className="generate-button" type="button" disabled={selectedCodes.length === 0 || isGenerating} onClick={generateRoutine}>
