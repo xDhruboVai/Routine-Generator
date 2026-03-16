@@ -96,10 +96,11 @@ app.post("/api/generate-routine", (req, res) => {
       });
     }
 
-    const routines = generateRoutines(inMemoryCatalog.courses, uniqueCourseCodes, preferences);
+    const generation = generateRoutines(inMemoryCatalog.courses, uniqueCourseCodes, preferences);
 
     res.json({
-      routines,
+      routines: generation.routines,
+      stats: generation.stats,
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -122,7 +123,7 @@ app.post("/api/generate-routine", (req, res) => {
     console.log(`Catalog loaded. Sections in memory: ${inMemoryCatalog.courses.length}`);
 
     app.listen(PORT, () => {
-      console.log(`Routine Generator backend listening on port ${PORT}`);
+      console.log(`Routiner Khichuri backend listening on port ${PORT}`);
     });
   } catch (error) {
     console.error("Failed to load course catalog on startup.");

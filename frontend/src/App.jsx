@@ -91,50 +91,17 @@ function WeeklyCalendar({ sections }) {
 
   const slotMap = useMemo(() => {
     const map = new Map();
-    const spanByMeetingKey = new Map();
 
     DAY_ORDER.forEach((day) => {
       const dayMeetings = meetings.filter((meeting) => meeting.day === day);
-
-      dayMeetings.forEach((meeting) => {
-        const overlappingSlotIndexes = TIME_SLOTS
-          .map((slot, slotIndex) => {
-            const slotStart = toMinutes(slot.startTime);
-            const slotEnd = toMinutes(slot.endTime);
-            return overlaps(meeting.startMinutes, meeting.endMinutes, slotStart, slotEnd)
-              ? slotIndex
-              : null;
-          })
-          .filter((value) => value != null);
-
-        if (overlappingSlotIndexes.length === 0) {
-          return;
-        }
-
-        spanByMeetingKey.set(meeting.meetingKey, {
-          startSlotIndex: overlappingSlotIndexes[0],
-          slotSpan: overlappingSlotIndexes.length,
-        });
-      });
 
       TIME_SLOTS.forEach((slot, slotIndex) => {
         const slotStart = toMinutes(slot.startTime);
         const slotEnd = toMinutes(slot.endTime);
 
-        const matchedMeetings = dayMeetings
-          .filter((meeting) => overlaps(meeting.startMinutes, meeting.endMinutes, slotStart, slotEnd))
-          .map((meeting) => {
-            const spanInfo = spanByMeetingKey.get(meeting.meetingKey) || {
-              startSlotIndex: slotIndex,
-              slotSpan: 1,
-            };
-
-            return {
-              ...meeting,
-              slotSpan: spanInfo.slotSpan,
-              renderInThisSlot: spanInfo.startSlotIndex === slotIndex,
-            };
-          });
+        const matchedMeetings = dayMeetings.filter((meeting) =>
+          overlaps(meeting.startMinutes, meeting.endMinutes, slotStart, slotEnd),
+        );
 
         map.set(`${day}-${slotIndex}`, matchedMeetings);
       });
@@ -185,9 +152,7 @@ function WeeklyCalendar({ sections }) {
               <tr key={slot.label}>
                 <td className="slot-label">{slot.label}</td>
                 {DAY_ORDER.map((day) => {
-                  const items = (slotMap.get(`${day}-${slotIndex}`) || []).filter(
-                    (meeting) => meeting.renderInThisSlot,
-                  );
+                  const items = slotMap.get(`${day}-${slotIndex}`) || [];
                   return (
                     <td key={`${day}-${slot.label}`} className="slot-cell">
                       <div className="slot-events">
@@ -199,7 +164,6 @@ function WeeklyCalendar({ sections }) {
                               "--event-bg": courseColorMap.get(meeting.courseCode)?.bg || "#e7f6f2",
                               "--event-border": courseColorMap.get(meeting.courseCode)?.border || "#2d9f93",
                               "--event-text": courseColorMap.get(meeting.courseCode)?.text || "#0f4f48",
-                              "--event-span": meeting.slotSpan || 1,
                             }}
                           >
                             <div className="slot-event-title">{meeting.courseCode}</div>
@@ -226,6 +190,8 @@ function WeeklyCalendar({ sections }) {
 }
 
 function App() {
+  const ROUTINES_PER_PAGE = 5;
+
   const [allCodes, setAllCodes] = useState([]);
   const [codeQuery, setCodeQuery] = useState("");
   const [selectedCodes, setSelectedCodes] = useState([]);
@@ -243,6 +209,8 @@ function App() {
   const [loadingCodes, setLoadingCodes] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [routines, setRoutines] = useState([]);
+  const [routineStats, setRoutineStats] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -259,6 +227,22 @@ function App() {
     }
 
     fetchCourseCodes();
+  }, []);
+
+  useEffect(() => {
+    document.title = "Routiner Khichuri";
+  }, []);
+
+  useEffect(() => {
+    function handlePointerMove(event) {
+      document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
+      document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+    };
   }, []);
 
   const filteredSuggestions = useMemo(() => {
@@ -387,8 +371,11 @@ function App() {
         (a, b) => (b.metrics?.score || 0) - (a.metrics?.score || 0),
       );
       setRoutines(sorted);
+      setRoutineStats(response.data.stats || null);
+      setCurrentPage(1);
     } catch (error) {
       setRoutines([]);
+      setRoutineStats(null);
       const message =
         error?.response?.data?.error || "Cannot generate schedule with these constraints";
       setErrorMessage(message);
@@ -397,10 +384,23 @@ function App() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(routines.length / ROUTINES_PER_PAGE));
+  const pageStartIndex = (currentPage - 1) * ROUTINES_PER_PAGE;
+  const pageRoutines = routines.slice(pageStartIndex, pageStartIndex + ROUTINES_PER_PAGE);
+
   return (
     <div className="app-shell">
+      <div className="ambient-bg" aria-hidden="true">
+        <div className="wave wave-a" />
+        <div className="wave wave-b" />
+        <div className="wave wave-c" />
+      </div>
+
       <header className="hero-header">
-        <h1>Routine Generator</h1>
+        <div className="hero-header-top">
+          <span className="hero-brand-pill">Routiner Khichuri</span>
+        </div>
+        <h1>Routiner Khichuri</h1>
         <p>Build valid section combinations with constraint-based scheduling.</p>
       </header>
 
@@ -547,15 +547,27 @@ function App() {
 
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
 
-      <section className="panel">
+      <section className="panel results-panel">
         <h2>Results</h2>
         {routines.length === 0 && !errorMessage && <p className="hint-text">Generate a routine to view schedules.</p>}
 
+        {routines.length > 0 && (
+          <div className="results-summary">
+            <span>
+              Created <strong>{routineStats?.generatedRoutines ?? routines.length}</strong> routines from
+              <strong> {routineStats?.totalCombinations ?? "N/A"}</strong> combinations.
+            </span>
+            <span>
+              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+            </span>
+          </div>
+        )}
+
         <div className="results-stack">
-          {routines.map((routine, index) => (
-            <article key={`routine-${index}`} className="result-card">
+          {pageRoutines.map((routine, index) => (
+            <article key={`routine-${pageStartIndex + index}`} className="result-card">
               <div className="result-header">
-                <h3>Routine #{index + 1}</h3>
+                <h3>Routine #{pageStartIndex + index + 1}</h3>
                 <p>
                   Score: <strong>{Math.round(routine.metrics.score || 0)}</strong> | Days: <strong>{routine.metrics.totalDays}</strong> | Total Hours: <strong>{routine.metrics.totalHours.toFixed(2)}</strong> | Avg Daily: <strong>{routine.metrics.avgDailyHours.toFixed(2)}</strong>
                 </p>
@@ -565,6 +577,45 @@ function App() {
             </article>
           ))}
         </div>
+
+        {routines.length > ROUTINES_PER_PAGE && (
+          <div className="results-pagination">
+            <button
+              type="button"
+              className="page-btn"
+              disabled={currentPage === 1}
+              onClick={() => {
+                setCurrentPage((previous) => Math.max(1, previous - 1));
+              }}
+            >
+              Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                type="button"
+                className={`page-btn page-number ${page === currentPage ? "is-active" : ""}`}
+                onClick={() => {
+                  setCurrentPage(page);
+                }}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              className="page-btn"
+              disabled={currentPage === totalPages}
+              onClick={() => {
+                setCurrentPage((previous) => Math.min(totalPages, previous + 1));
+              }}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );

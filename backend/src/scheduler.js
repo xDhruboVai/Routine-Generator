@@ -520,6 +520,25 @@ function serializeSection(section) {
   };
 }
 
+function calculateTotalCombinations(orderedCourseCodes, candidatesByCourse) {
+  let total = 1n;
+
+  orderedCourseCodes.forEach((courseCode) => {
+    const count = BigInt((candidatesByCourse.get(courseCode) || []).length);
+    total *= count;
+  });
+
+  return total;
+}
+
+function serializeBigIntCount(value) {
+  if (value <= BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number(value);
+  }
+
+  return value.toString();
+}
+
 function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences = {}) {
   const normalizedRequestedCodes = (requestedCourseCodes || [])
     .map((code) => String(code || "").toUpperCase().trim())
@@ -566,9 +585,11 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
 
   const validSchedules = [];
   const startedAt = Date.now();
+  const totalCombinations = calculateTotalCombinations(orderedCourseCodes, candidatesByCourse);
   const searchState = {
     timedOut: false,
     reachedResultCap: false,
+    exploredLeafCount: 0,
   };
 
   function dfs(courseIndex, currentSelection, dayCounts) {
@@ -582,6 +603,7 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
     }
 
     if (courseIndex === orderedCourseCodes.length) {
+      searchState.exploredLeafCount += 1;
       validSchedules.push(evaluateSchedule([...currentSelection], preferences));
       if (validSchedules.length >= MAX_RETURNED_ROUTINES) {
         searchState.reachedResultCap = true;
@@ -644,10 +666,21 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
     compareSchedulesDescending(a, b, String(preferences.priority || "MIN_DAYS").toUpperCase()),
   );
 
-  return validSchedules.map((schedule) => ({
+  const routines = validSchedules.map((schedule) => ({
     sections: schedule.selectedSections.map(serializeSection),
     metrics: schedule.metrics,
   }));
+
+  return {
+    routines,
+    stats: {
+      totalCombinations: serializeBigIntCount(totalCombinations),
+      generatedRoutines: routines.length,
+      exploredLeafCount: searchState.exploredLeafCount,
+      timedOut: searchState.timedOut,
+      reachedResultCap: searchState.reachedResultCap,
+    },
+  };
 }
 
 module.exports = {

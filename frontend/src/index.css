@@ -1,4 +1,6 @@
 :root {
+  --cursor-x: 50vw;
+  --cursor-y: 50vh;
   color-scheme: light;
   font-family: "Segoe UI", "Trebuchet MS", sans-serif;
   font-size: 16px;
