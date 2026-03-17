@@ -226,6 +226,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState("");
   const [sourceLastUpdated, setSourceLastUpdated] = useState(null);
+  const [backendLastCheckedAt, setBackendLastCheckedAt] = useState(null);
   const [downloadingRoutineKey, setDownloadingRoutineKey] = useState("");
   const routineCardRefs = useRef({});
   const resultsPanelRef = useRef(null);
@@ -252,25 +253,78 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const VISIBLE_INTERVAL_MS = 15000;
+    const HIDDEN_INTERVAL_MS = 60000;
+    const MAX_BACKOFF_MS = 120000;
+    const JITTER_RATIO = 0.2;
+
     let isMounted = true;
+    let timeoutId = null;
+    let consecutiveFailures = 0;
+
+    function getBaseIntervalMs() {
+      return document.visibilityState === "hidden" ? HIDDEN_INTERVAL_MS : VISIBLE_INTERVAL_MS;
+    }
+
+    function applyJitter(ms) {
+      const jitterFactor = 1 + (Math.random() * 2 - 1) * JITTER_RATIO;
+      return Math.max(1000, Math.round(ms * jitterFactor));
+    }
+
+    function getNextDelayMs() {
+      const baseMs = getBaseIntervalMs();
+      const backedOffMs = Math.min(MAX_BACKOFF_MS, baseMs * (2 ** consecutiveFailures));
+      return Math.min(MAX_BACKOFF_MS, applyJitter(backedOffMs));
+    }
+
+    function clearPollTimer() {
+      if (!timeoutId) {
+        return;
+      }
+
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
+    function scheduleNextPoll() {
+      clearPollTimer();
+      timeoutId = setTimeout(() => {
+        fetchHealthStatus();
+      }, getNextDelayMs());
+    }
 
     async function fetchHealthStatus() {
       try {
         const response = await axios.get(`${API_BASE_URL}/api/health`);
         if (!isMounted) return;
         setSourceLastUpdated(response.data?.sourceMetadataLastUpdated || null);
+        setBackendLastCheckedAt(
+          response.data?.lastRefreshCompletedAt || response.data?.lastRefreshAttemptAt || null,
+        );
+        consecutiveFailures = 0;
       } catch {
         if (!isMounted) return;
         setSourceLastUpdated(null);
+        setBackendLastCheckedAt(null);
+        consecutiveFailures += 1;
+      } finally {
+        if (!isMounted) return;
+        scheduleNextPoll();
       }
     }
 
+    function handleVisibilityChange() {
+      if (!isMounted) return;
+      scheduleNextPoll();
+    }
+
     fetchHealthStatus();
-    const intervalId = setInterval(fetchHealthStatus, 120000);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
+      clearPollTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -585,9 +639,12 @@ function App() {
 
       <header className="hero-header">
         <h1>ROUTINER KHICHURI</h1>
-        <p>Aj prochur routiner banabo.</p>
+        <p>Aj prochur routine banabo.</p>
         <p className="source-last-updated-text">
-          Source last updated: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
+          Source last updated at: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
+        </p>
+        <p className="source-last-updated-text">
+          Backend last checked at: {backendLastCheckedAt ? new Date(backendLastCheckedAt).toLocaleString() : "Unavailable"}
         </p>
       </header>
 

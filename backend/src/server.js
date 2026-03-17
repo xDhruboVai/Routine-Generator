@@ -7,7 +7,10 @@ const PORT = process.env.PORT || 4000;
 const COURSE_SOURCE_URL =
   process.env.COURSE_SOURCE_URL || "https://usis-cdn.eniamza.com/connect-migrate.json";
 const CATALOG_FETCH_TIMEOUT_MS = Number(process.env.CATALOG_FETCH_TIMEOUT_MS || 30000);
-const CATALOG_REFRESH_INTERVAL_MS = Number(process.env.CATALOG_REFRESH_INTERVAL_MS || 120000);
+const CATALOG_REFRESH_INTERVAL_MS = Math.max(
+  5000,
+  Number(process.env.CATALOG_REFRESH_INTERVAL_MS || 15000),
+);
 
 let inMemoryCatalog = {
   metadata: {},
@@ -20,6 +23,7 @@ let refreshInProgress = false;
 let sourceHealth = {
   sourceReachable: false,
   lastRefreshAttemptAt: null,
+  lastRefreshCompletedAt: null,
   lastSuccessfulLoadAt: null,
   lastRefreshError: null,
 };
@@ -63,6 +67,7 @@ async function refreshCourseCatalog(reason = "interval") {
       `Catalog refresh (${reason}) failed: ${sourceHealth.lastRefreshError}`,
     );
   } finally {
+    sourceHealth.lastRefreshCompletedAt = new Date().toISOString();
     refreshInProgress = false;
   }
 }
@@ -95,6 +100,7 @@ app.get("/api/health", (req, res) => {
     sourceReachable: sourceHealth.sourceReachable,
     sourceMetadataLastUpdated: inMemoryCatalog.metadata?.lastUpdated || null,
     lastRefreshAttemptAt: sourceHealth.lastRefreshAttemptAt,
+    lastRefreshCompletedAt: sourceHealth.lastRefreshCompletedAt,
     lastSuccessfulLoadAt: sourceHealth.lastSuccessfulLoadAt,
     lastRefreshError: sourceHealth.lastRefreshError,
     loadedAt: inMemoryCatalog.loadedAt,
