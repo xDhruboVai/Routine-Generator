@@ -638,14 +638,18 @@ function App() {
       </div>
 
       <header className="hero-header">
-        <h1>ROUTINER KHICHURI</h1>
-        <p>Aj prochur routine banabo.</p>
-        <p className="source-last-updated-text">
-          Source last updated at: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
-        </p>
-        <p className="source-last-updated-text">
-          Backend last checked at: {backendLastCheckedAt ? new Date(backendLastCheckedAt).toLocaleString() : "Unavailable"}
-        </p>
+        <div className="hero-header-main">
+          <h1>ROUTINER KHICHURI</h1>
+          <p>Aj prochur routine banabo.</p>
+        </div>
+        <div className="hero-header-status">
+          <p className="source-last-updated-text">
+            Source last updated at: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
+          </p>
+          <p className="source-last-updated-text">
+            Backend last checked at: {backendLastCheckedAt ? new Date(backendLastCheckedAt).toLocaleString() : "Unavailable"}
+          </p>
+        </div>
       </header>
 
       <section className="panel">
