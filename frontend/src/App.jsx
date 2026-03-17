@@ -834,7 +834,7 @@ function App() {
             Source last updated at: {sourceLastUpdated ? new Date(sourceLastUpdated).toLocaleString() : "Unavailable"}
           </p>
           <p className="source-last-updated-text">
-            Backend last checked at: {backendLastCheckedAt ? new Date(backendLastCheckedAt).toLocaleString() : "Unavailable"}
+            Source last checked at: {backendLastCheckedAt ? new Date(backendLastCheckedAt).toLocaleString() : "Unavailable"}
           </p>
         </div>
       </header>
