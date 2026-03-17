@@ -1,7 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const { generateRoutines, MAX_REQUESTED_COURSES } = require("./scheduler");
+const {
+  generateRoutines,
+  MAX_REQUESTED_COURSES,
+  serializeSection,
+  sectionPassesSeatFilter,
+} = require("./scheduler");
 
 const PORT = process.env.PORT || 4000;
 const COURSE_SOURCE_URL =
@@ -151,6 +156,41 @@ app.get("/api/course-faculties", (req, res) => {
 
   res.json({
     facultiesByCourse,
+  });
+});
+
+app.use("/api/course-sections", requireCatalogReady);
+app.get("/api/course-sections", (req, res) => {
+  const rawCodes = String(req.query.courseCodes || "");
+  const requestedCodes = rawCodes
+    .split(",")
+    .map((code) => String(code || "").toUpperCase().trim())
+    .filter(Boolean);
+
+  const uniqueCodes = [...new Set(requestedCodes)];
+  const ignoreFilledSections = String(req.query.ignoreFilledSections || "true").toLowerCase() !== "false";
+  const sectionsByCourse = {};
+
+  uniqueCodes.forEach((code) => {
+    sectionsByCourse[code] = [];
+  });
+
+  inMemoryCatalog.courses.forEach((section) => {
+    const code = String(section.courseCode || "").toUpperCase();
+    if (!sectionsByCourse[code]) return;
+    if (!sectionPassesSeatFilter(section, ignoreFilledSections)) return;
+
+    sectionsByCourse[code].push(serializeSection(section));
+  });
+
+  uniqueCodes.forEach((code) => {
+    sectionsByCourse[code] = sectionsByCourse[code].sort((a, b) => {
+      return String(a.sectionName || "").localeCompare(String(b.sectionName || ""));
+    });
+  });
+
+  res.json({
+    sectionsByCourse,
   });
 });
 

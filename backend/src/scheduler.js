@@ -180,6 +180,28 @@ function sectionFitsAllowedDays(section, allowedDays) {
   return meetings.every((meeting) => allowedDaySet.has(meeting.day));
 }
 
+function sectionMatchesPreferredSections(section, courseCode, preferredSectionsByCourse) {
+  const rawPreferred = preferredSectionsByCourse?.[courseCode];
+  if (!Array.isArray(rawPreferred) || rawPreferred.length === 0) {
+    return true;
+  }
+
+  const preferredSet = new Set(
+    rawPreferred.map((value) => String(value || "").toUpperCase().trim()).filter(Boolean),
+  );
+
+  if (preferredSet.size === 0) {
+    return true;
+  }
+
+  const sectionName = String(section.sectionName || section.section || section.classSection || "")
+    .toUpperCase()
+    .trim();
+  const sectionId = String(section.sectionId || "").toUpperCase().trim();
+
+  return preferredSet.has(sectionName) || (sectionId && preferredSet.has(sectionId));
+}
+
 function sectionsConflictByClass(sectionA, sectionB) {
   const meetingsA = getNormalizedMeetings(sectionA);
   const meetingsB = getNormalizedMeetings(sectionB);
@@ -358,6 +380,54 @@ function calculateDailySpanHours(dayToMeetings) {
   return totalSpanHours;
 }
 
+function calculateDailyLoadStats(dayToMeetings) {
+  const dailyActiveHours = [];
+  let maxDailySpanHours = 0;
+  let maxDailyActiveHours = 0;
+
+  dayToMeetings.forEach((meetings) => {
+    if (!Array.isArray(meetings) || meetings.length === 0) return;
+
+    let activeHours = 0;
+    meetings.forEach((meeting) => {
+      activeHours += (meeting.endMinutes - meeting.startMinutes) / 60;
+    });
+
+    const firstStart = meetings[0].startMinutes;
+    const lastEnd = meetings[meetings.length - 1].endMinutes;
+    const spanHours = lastEnd > firstStart ? (lastEnd - firstStart) / 60 : 0;
+
+    dailyActiveHours.push(activeHours);
+    if (activeHours > maxDailyActiveHours) {
+      maxDailyActiveHours = activeHours;
+    }
+
+    if (spanHours > maxDailySpanHours) {
+      maxDailySpanHours = spanHours;
+    }
+  });
+
+  if (dailyActiveHours.length === 0) {
+    return {
+      maxDailySpanHours: 0,
+      maxDailyActiveHours: 0,
+      dailyLoadVariance: 0,
+    };
+  }
+
+  const mean = dailyActiveHours.reduce((sum, value) => sum + value, 0) / dailyActiveHours.length;
+  const dailyLoadVariance = dailyActiveHours.reduce((sum, value) => {
+    const delta = value - mean;
+    return sum + delta * delta;
+  }, 0) / dailyActiveHours.length;
+
+  return {
+    maxDailySpanHours,
+    maxDailyActiveHours,
+    dailyLoadVariance,
+  };
+}
+
 function evaluateSchedule(selectedSections, preferences) {
   const dayToMeetings = buildDayUsage(selectedSections);
   const totalDays = dayToMeetings.size;
@@ -373,6 +443,7 @@ function evaluateSchedule(selectedSections, preferences) {
   const breakPenalty = calculateBreakPenalty(dayToMeetings, preferences.breakPreference);
   const idleGapPenalty = calculateIdleGapPenalty(dayToMeetings);
   const totalDailySpanHours = calculateDailySpanHours(dayToMeetings);
+  const dailyLoadStats = calculateDailyLoadStats(dayToMeetings);
   const breakPreferenceEnabled = Boolean(preferences.breakPreference?.enabled);
 
   const priority = String(preferences.priority || "MIN_DAYS").toUpperCase();
@@ -389,6 +460,15 @@ function evaluateSchedule(selectedSections, preferences) {
       ? idleGapPenalty * (breakPreferenceEnabled ? 8 : 28)
       : idleGapPenalty * 10) +
     (priority === "MIN_DAYS" ? totalDailySpanHours * 6 : totalDailySpanHours * 2) +
+    (priority === "MIN_DAYS"
+      ? dailyLoadStats.maxDailySpanHours * 14
+      : dailyLoadStats.maxDailySpanHours * 5) +
+    (priority === "MIN_DAYS"
+      ? dailyLoadStats.maxDailyActiveHours * 16
+      : dailyLoadStats.maxDailyActiveHours * 4) +
+    (priority === "MIN_DAYS"
+      ? dailyLoadStats.dailyLoadVariance * 18
+      : dailyLoadStats.dailyLoadVariance * 6) +
     breakPenalty * 30 +
     dayUtilization * 12;
 
@@ -403,6 +483,9 @@ function evaluateSchedule(selectedSections, preferences) {
       breakPenalty,
       idleGapPenalty,
       totalDailySpanHours,
+      maxDailySpanHours: dailyLoadStats.maxDailySpanHours,
+      maxDailyActiveHours: dailyLoadStats.maxDailyActiveHours,
+      dailyLoadVariance: dailyLoadStats.dailyLoadVariance,
       score,
     },
     score,
@@ -418,8 +501,30 @@ function compareSchedulesDescending(a, b, priority, breakPreferenceEnabled) {
     if (a.metrics.avgDailyHours !== b.metrics.avgDailyHours) {
       return a.metrics.avgDailyHours - b.metrics.avgDailyHours;
     }
+
+    if (a.metrics.maxDailySpanHours !== b.metrics.maxDailySpanHours) {
+      return a.metrics.maxDailySpanHours - b.metrics.maxDailySpanHours;
+    }
+
+    if (a.metrics.idleGapPenalty !== b.metrics.idleGapPenalty) {
+      return a.metrics.idleGapPenalty - b.metrics.idleGapPenalty;
+    }
+
+    if (a.metrics.dailyLoadVariance !== b.metrics.dailyLoadVariance) {
+      return a.metrics.dailyLoadVariance - b.metrics.dailyLoadVariance;
+    }
+
+    if (a.metrics.maxDailyActiveHours !== b.metrics.maxDailyActiveHours) {
+      return a.metrics.maxDailyActiveHours - b.metrics.maxDailyActiveHours;
+    }
   } else if (a.metrics.totalDays !== b.metrics.totalDays) {
     return a.metrics.totalDays - b.metrics.totalDays;
+  } else if (a.metrics.maxDailySpanHours !== b.metrics.maxDailySpanHours) {
+    return a.metrics.maxDailySpanHours - b.metrics.maxDailySpanHours;
+  } else if (a.metrics.maxDailyActiveHours !== b.metrics.maxDailyActiveHours) {
+    return a.metrics.maxDailyActiveHours - b.metrics.maxDailyActiveHours;
+  } else if (a.metrics.dailyLoadVariance !== b.metrics.dailyLoadVariance) {
+    return a.metrics.dailyLoadVariance - b.metrics.dailyLoadVariance;
   } else if (breakPreferenceEnabled) {
     if (a.metrics.breakPenalty !== b.metrics.breakPenalty) {
       return a.metrics.breakPenalty - b.metrics.breakPenalty;
@@ -517,6 +622,10 @@ function buildCandidateSectionsByCourse(courses, requestedCourseCodes, preferenc
     getNormalizedMeetings(section);
 
     if (!sectionMatchesFacultyPreferences(section, code, preferences.facultyPreference)) {
+      return;
+    }
+
+    if (!sectionMatchesPreferredSections(section, code, preferences.preferredSectionsByCourse)) {
       return;
     }
 
@@ -723,6 +832,7 @@ function generateRoutines(catalogCourses, requestedCourseCodes, rawPreferences =
       ? rawPreferences.allowedDays.map((day) => String(day || "").toUpperCase()).filter(Boolean)
       : [],
     facultyPreference: rawPreferences.facultyPreference || {},
+    preferredSectionsByCourse: rawPreferences.preferredSectionsByCourse || {},
     breakPreference: rawPreferences.breakPreference || {},
     ignoredTimeSlots: normalizeIgnoredTimeSlots(rawPreferences.ignoredTimeSlots),
     ignoreFilledSections: rawPreferences.ignoreFilledSections !== false,
@@ -855,4 +965,6 @@ module.exports = {
   generateRoutines,
   MAX_REQUESTED_COURSES,
   toMinutes,
+  serializeSection,
+  sectionPassesSeatFilter,
 };

@@ -97,6 +97,23 @@ function overlaps(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
+function formatMeetingLabel(meeting) {
+  const day = String(meeting?.day || "").toUpperCase();
+  const dayLabel = day ? day.charAt(0) + day.slice(1).toLowerCase() : "Day";
+  return `${dayLabel} ${meeting?.startTime || "TBA"}-${meeting?.endTime || "TBA"}`;
+}
+
+function getSectionTimingGroups(section) {
+  const schedule = section?.sectionSchedule || {};
+  const classSchedules = Array.isArray(schedule.classSchedules) ? schedule.classSchedules : [];
+  const labSchedules = Array.isArray(schedule.labSchedules) ? schedule.labSchedules : [];
+
+  return {
+    classLines: classSchedules.map(formatMeetingLabel),
+    labLines: labSchedules.map(formatMeetingLabel),
+  };
+}
+
 function WeeklyCalendar({ sections }) {
   const meetings = useMemo(() => normalizeMeetingsFromSections(sections), [sections]);
   const courseColorMap = useMemo(() => buildCourseColorMap(sections), [sections]);
@@ -214,6 +231,9 @@ function App() {
 
   const [facultyPrefsByCourse, setFacultyPrefsByCourse] = useState({});
   const [facultyOptionsByCourse, setFacultyOptionsByCourse] = useState({});
+  const [sectionOptionsByCourse, setSectionOptionsByCourse] = useState({});
+  const [preferredSectionsByCourse, setPreferredSectionsByCourse] = useState({});
+  const [activePreferenceTab, setActivePreferenceTab] = useState("FACULTY");
 
   const [preferBreaks, setPreferBreaks] = useState(false);
   const [ignoreFilledSections, setIgnoreFilledSections] = useState(true);
@@ -367,6 +387,16 @@ function App() {
       delete next[code];
       return next;
     });
+    setPreferredSectionsByCourse((previous) => {
+      const next = { ...previous };
+      delete next[code];
+      return next;
+    });
+    setSectionOptionsByCourse((previous) => {
+      const next = { ...previous };
+      delete next[code];
+      return next;
+    });
   }
 
   function toggleAllowedDay(day) {
@@ -406,6 +436,23 @@ function App() {
     });
   }
 
+  function togglePreferredSection(courseCode, sectionName) {
+    const normalizedSection = String(sectionName || "").toUpperCase().trim();
+    if (!normalizedSection) return;
+
+    setPreferredSectionsByCourse((previous) => {
+      const existing = Array.isArray(previous[courseCode]) ? previous[courseCode] : [];
+      const nextValues = existing.includes(normalizedSection)
+        ? existing.filter((value) => value !== normalizedSection)
+        : [...existing, normalizedSection];
+
+      return {
+        ...previous,
+        [courseCode]: nextValues,
+      };
+    });
+  }
+
   function toggleIgnoredSlot(slotLabel) {
     setIgnoredSlotLabels((previous) => {
       if (previous.includes(slotLabel)) {
@@ -432,29 +479,70 @@ function App() {
       return;
     }
 
-    try {
-      setDownloadingRoutineKey(routineKey);
-      const imageModule = await import("html-to-image");
-      const toPng = imageModule?.toPng;
-
-      if (typeof toPng !== "function") {
-        throw new Error("Image export function is unavailable");
-      }
-
-      const dataUrl = await toPng(cardNode, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-      });
-
+    function triggerDownload(dataUrl) {
       const link = document.createElement("a");
       link.href = dataUrl;
       link.download = `routine-${routineNumber}.png`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+    }
+
+    try {
+      setDownloadingRoutineKey(routineKey);
+      cardNode.classList.add("is-exporting");
+
+      try {
+        const imageModule = await import("html-to-image");
+        const toPng = imageModule?.toPng;
+
+        if (typeof toPng !== "function") {
+          throw new Error("Image export function is unavailable");
+        }
+
+        const dataUrl = await toPng(cardNode, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+          filter: (node) => {
+            if (node instanceof HTMLElement && node.classList.contains("download-routine-button")) {
+              return false;
+            }
+
+            return true;
+          },
+          style: {
+            animation: "none",
+            transform: "none",
+            opacity: "1",
+          },
+        });
+
+        triggerDownload(dataUrl);
+      } catch (primaryError) {
+        const canvasModule = await import("html2canvas");
+        const html2canvas = canvasModule?.default;
+
+        if (typeof html2canvas !== "function") {
+          throw primaryError;
+        }
+
+        const canvas = await html2canvas(cardNode, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          ignoreElements: (element) => {
+            return element instanceof HTMLElement && element.classList.contains("download-routine-button");
+          },
+        });
+
+        triggerDownload(canvas.toDataURL("image/png"));
+      }
     } catch (error) {
       console.error("Routine image download failed", error);
       setErrorMessage("Could not download this routine image right now.");
     } finally {
+      cardNode.classList.remove("is-exporting");
       setDownloadingRoutineKey("");
     }
   }
@@ -478,6 +566,45 @@ function App() {
     fetchFacultyOptions();
   }, [selectedCodes]);
 
+  useEffect(() => {
+    async function fetchSectionOptions() {
+      if (selectedCodes.length === 0) {
+        setSectionOptionsByCourse({});
+        return;
+      }
+
+      try {
+        const query = encodeURIComponent(selectedCodes.join(","));
+        const response = await axios.get(
+          `${API_BASE_URL}/api/course-sections?courseCodes=${query}&ignoreFilledSections=${ignoreFilledSections}`,
+        );
+        const nextSectionsByCourse = response.data.sectionsByCourse || {};
+        setSectionOptionsByCourse(nextSectionsByCourse);
+
+        setPreferredSectionsByCourse((previous) => {
+          const next = { ...previous };
+
+          selectedCodes.forEach((code) => {
+            const validNames = new Set(
+              (nextSectionsByCourse[code] || [])
+                .map((section) => String(section.sectionName || "").toUpperCase().trim())
+                .filter(Boolean),
+            );
+
+            const existing = Array.isArray(next[code]) ? next[code] : [];
+            next[code] = existing.filter((value) => validNames.has(value));
+          });
+
+          return next;
+        });
+      } catch {
+        setSectionOptionsByCourse({});
+      }
+    }
+
+    fetchSectionOptions();
+  }, [selectedCodes, ignoreFilledSections]);
+
   async function generateRoutine() {
     queueResultsScroll();
 
@@ -487,6 +614,7 @@ function App() {
 
       const mustHaveByCourse = {};
       const avoidByCourse = {};
+      const selectedSectionsByCourse = {};
 
       selectedCodes.forEach((code) => {
         const prefs = facultyPrefsByCourse[code] || {};
@@ -504,6 +632,14 @@ function App() {
         if (avoid.length > 0) {
           avoidByCourse[code] = avoid;
         }
+
+        const preferredSections = Array.isArray(preferredSectionsByCourse[code])
+          ? preferredSectionsByCourse[code].map((value) => String(value || "").toUpperCase()).filter(Boolean)
+          : [];
+
+        if (preferredSections.length > 0) {
+          selectedSectionsByCourse[code] = preferredSections;
+        }
       });
 
       const payload = {
@@ -520,6 +656,7 @@ function App() {
             mustHaveByCourse,
             avoidByCourse,
           },
+          preferredSectionsByCourse: selectedSectionsByCourse,
           breakPreference: {
             enabled: preferBreaks,
           },
@@ -690,48 +827,130 @@ function App() {
           </div>
 
           {selectedCodes.length > 0 && (
-            <div className="course-pref-grid">
-              <div className="course-pref-head">Course</div>
-              <div className="course-pref-head">Preferred Faculties</div>
-              <div className="course-pref-head">Faculties To Avoid</div>
+            <div className="preference-tab-wrap">
+              <div className="preference-tab-row">
+                <button
+                  type="button"
+                  className={`preference-tab-btn ${activePreferenceTab === "FACULTY" ? "is-active" : ""}`}
+                  onClick={() => setActivePreferenceTab("FACULTY")}
+                >
+                  Faculty Preferences
+                </button>
+                <button
+                  type="button"
+                  className={`preference-tab-btn ${activePreferenceTab === "SECTION" ? "is-active" : ""}`}
+                  onClick={() => setActivePreferenceTab("SECTION")}
+                >
+                  Preferred Sections
+                </button>
+              </div>
 
-              {selectedCodes.map((code) => (
-                <Fragment key={code}>
-                  <div className="course-pref-code">{code}</div>
+              {activePreferenceTab === "FACULTY" ? (
+                <div className="course-pref-grid">
+                  <div className="course-pref-head">Course</div>
+                  <div className="course-pref-head">Preferred Faculties</div>
+                  <div className="course-pref-head">Faculties To Avoid</div>
 
-                  <div className="faculty-option-list">
-                    {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                      <label
-                        key={`${code}-preferred-${faculty}`}
-                        className={`faculty-option-item ${(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty) ? "is-preferred" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty)}
-                          onChange={() => toggleFacultyPreference(code, "preferredList", faculty)}
-                        />
-                        <span>{faculty}</span>
-                      </label>
-                    ))}
-                  </div>
+                  {selectedCodes.map((code) => (
+                    <Fragment key={code}>
+                      <div className="course-pref-code">{code}</div>
 
-                  <div className="faculty-option-list">
-                    {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                      <label
-                        key={`${code}-avoid-${faculty}`}
-                        className={`faculty-option-item ${(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty) ? "is-avoided" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty)}
-                          onChange={() => toggleFacultyPreference(code, "avoidList", faculty)}
-                        />
-                        <span>{faculty}</span>
-                      </label>
-                    ))}
-                  </div>
-                </Fragment>
-              ))}
+                      <div className="faculty-option-list">
+                        {(facultyOptionsByCourse[code] || []).map((faculty) => (
+                          <label
+                            key={`${code}-preferred-${faculty}`}
+                            className={`faculty-option-item ${(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty) ? "is-preferred" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty)}
+                              onChange={() => toggleFacultyPreference(code, "preferredList", faculty)}
+                            />
+                            <span>{faculty}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="faculty-option-list">
+                        {(facultyOptionsByCourse[code] || []).map((faculty) => (
+                          <label
+                            key={`${code}-avoid-${faculty}`}
+                            className={`faculty-option-item ${(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty) ? "is-avoided" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty)}
+                              onChange={() => toggleFacultyPreference(code, "avoidList", faculty)}
+                            />
+                            <span>{faculty}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </Fragment>
+                  ))}
+                </div>
+              ) : (
+                <div className="section-pref-grid">
+                  <div className="course-pref-head">Course</div>
+                  <div className="course-pref-head">Valid Sections (hover for timings)</div>
+
+                  {selectedCodes.map((code) => (
+                    <Fragment key={`${code}-section-row`}>
+                      <div className="course-pref-code">{code}</div>
+
+                      <div className="section-option-list">
+                        {(sectionOptionsByCourse[code] || []).length === 0 ? (
+                          <div className="section-empty">No valid sections right now.</div>
+                        ) : (
+                          (sectionOptionsByCourse[code] || []).map((section) => {
+                            const sectionName = String(section.sectionName || "").toUpperCase();
+                            const isSelected = (preferredSectionsByCourse[code] || []).includes(sectionName);
+                            const timingGroups = getSectionTimingGroups(section);
+
+                            return (
+                              <button
+                                key={`${code}-${section.sectionId || sectionName}`}
+                                type="button"
+                                className={`section-option-chip ${isSelected ? "is-selected" : ""}`}
+                                onClick={() => togglePreferredSection(code, sectionName)}
+                              >
+                                <span className="section-chip-title">
+                                  {sectionName || "SECTION"}
+                                  {section.faculties ? ` | ${section.faculties}` : ""}
+                                </span>
+                                <span className="section-chip-meta">
+                                  Seats: {section.remainingSeats == null ? "N/A" : section.remainingSeats}
+                                </span>
+
+                                <span className="section-tooltip" role="tooltip">
+                                  <span className="section-tooltip-title">{code} {sectionName || "Section"}</span>
+                                  <span className="section-tooltip-subtitle">Theory</span>
+                                  {timingGroups.classLines.length > 0 ? (
+                                    timingGroups.classLines.map((line, index) => (
+                                      <span key={`${code}-${sectionName}-class-${index}`}>{line}</span>
+                                    ))
+                                  ) : (
+                                    <span>No theory timing listed.</span>
+                                  )}
+
+                                  <span className="section-tooltip-subtitle">Lab</span>
+                                  {timingGroups.labLines.length > 0 ? (
+                                    timingGroups.labLines.map((line, index) => (
+                                      <span key={`${code}-${sectionName}-lab-${index}`}>{line}</span>
+                                    ))
+                                  ) : (
+                                    <span>No lab timing listed.</span>
+                                  )}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </Fragment>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </section>
