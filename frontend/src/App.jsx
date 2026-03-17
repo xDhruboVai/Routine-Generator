@@ -652,170 +652,172 @@ function App() {
         </div>
       </header>
 
-      <section className="panel">
-        <h2>Course Selection</h2>
-        <div className="course-search-area">
-          <input
-            value={codeQuery}
-            onChange={(event) => setCodeQuery(event.target.value)}
-            placeholder="Search course code (e.g., CSE111)"
-          />
-          <button type="button" onClick={() => addCourseCode(codeQuery)}>
-            Add
-          </button>
-        </div>
-
-        {loadingCodes && <p className="hint-text">Loading course list...</p>}
-
-        {filteredSuggestions.length > 0 && (
-          <div className="suggestion-row">
-            {filteredSuggestions.map((code) => (
-              <button key={code} type="button" className="suggestion-pill" onClick={() => addCourseCode(code)}>
-                {code}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="chip-row">
-          {selectedCodes.map((code) => (
-            <span key={code} className="code-chip">
-              {code}
-              <button type="button" onClick={() => removeCourseCode(code)}>
-                x
-              </button>
-            </span>
-          ))}
-        </div>
-
-        {selectedCodes.length > 0 && (
-          <div className="course-pref-grid">
-            <div className="course-pref-head">Course</div>
-            <div className="course-pref-head">Preferred Faculties</div>
-            <div className="course-pref-head">Faculties To Avoid</div>
-
-            {selectedCodes.map((code) => (
-              <Fragment key={code}>
-                <div className="course-pref-code">{code}</div>
-
-                <div className="faculty-option-list">
-                  {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                    <label
-                      key={`${code}-preferred-${faculty}`}
-                      className={`faculty-option-item ${(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty) ? "is-preferred" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty)}
-                        onChange={() => toggleFacultyPreference(code, "preferredList", faculty)}
-                      />
-                      <span>{faculty}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="faculty-option-list">
-                  {(facultyOptionsByCourse[code] || []).map((faculty) => (
-                    <label
-                      key={`${code}-avoid-${faculty}`}
-                      className={`faculty-option-item ${(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty) ? "is-avoided" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty)}
-                        onChange={() => toggleFacultyPreference(code, "avoidList", faculty)}
-                      />
-                      <span>{faculty}</span>
-                    </label>
-                  ))}
-                </div>
-              </Fragment>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>Scheduling Settings</h2>
-        <div className="sub-panel day-selector-panel">
-          <h3>Preferred Class Days</h3>
-          <div className="day-toggle-bar">
-            {DAY_ORDER.map((day) => {
-              const enabled = allowedDays.includes(day);
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  className={`day-toggle ${enabled ? "is-selected" : ""}`}
-                  onClick={() => toggleAllowedDay(day)}
-                >
-                  {day.slice(0, 3)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="settings-grid">
-          <label>
-            Max Days Per Week
-            <input type="number" min="1" max="7" value={maxDaysPerWeek} onChange={(event) => setMaxDaysPerWeek(Number(event.target.value || 1))} />
-          </label>
-
-          <label>
-            Priority
-            <select value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="MIN_DAYS">Minimum Days</option>
-              <option value="MIN_DAILY_HOURS">Minimum Daily Hours</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="sub-panel">
-          <h3>Ignored Time Slots</h3>
-          <div className="ignored-slot-grid">
-            {TIME_SLOTS.map((slot) => {
-              const isSelected = ignoredSlotLabels.includes(slot.label);
-              return (
-                <button
-                  key={slot.label}
-                  type="button"
-                  className={`ignored-slot-toggle ${isSelected ? "is-selected" : ""}`}
-                  onClick={() => toggleIgnoredSlot(slot.label)}
-                >
-                  {slot.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="hint-text">8 tar class asholei korba?</p>
-        </div>
-
-        <div className="sub-panel">
-          <h3>Section Availability</h3>
-          <label className="checkbox-label">
+      <div className="setup-grid">
+        <section className="panel">
+          <h2>Course Selection</h2>
+          <div className="course-search-area">
             <input
-              type="checkbox"
-              checked={ignoreFilledSections}
-              onChange={(event) => setIgnoreFilledSections(event.target.checked)}
+              value={codeQuery}
+              onChange={(event) => setCodeQuery(event.target.value)}
+              placeholder="Search course code (e.g., CSE111)"
             />
-            Ignore filled sections
-          </label>
-        </div>
+            <button type="button" onClick={() => addCourseCode(codeQuery)}>
+              Add
+            </button>
+          </div>
 
-        <div className="sub-panel">
-          <h3>Break Preference</h3>
-          <label className="checkbox-label">
-            <input type="checkbox" checked={preferBreaks} onChange={(event) => setPreferBreaks(event.target.checked)} />
-            Prefer routines with breaks between consecutive classes
-          </label>
-          <p className="hint-text">Quiz er age pora lage bhai.</p>
-        </div>
+          {loadingCodes && <p className="hint-text">Loading course list...</p>}
 
-        <button className="generate-button" type="button" disabled={selectedCodes.length === 0 || isGenerating} onClick={generateRoutine}>
-          {isGenerating ? "Generating..." : "Generate Routine"}
-        </button>
-      </section>
+          {filteredSuggestions.length > 0 && (
+            <div className="suggestion-row">
+              {filteredSuggestions.map((code) => (
+                <button key={code} type="button" className="suggestion-pill" onClick={() => addCourseCode(code)}>
+                  {code}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="chip-row">
+            {selectedCodes.map((code) => (
+              <span key={code} className="code-chip">
+                {code}
+                <button type="button" onClick={() => removeCourseCode(code)}>
+                  x
+                </button>
+              </span>
+            ))}
+          </div>
+
+          {selectedCodes.length > 0 && (
+            <div className="course-pref-grid">
+              <div className="course-pref-head">Course</div>
+              <div className="course-pref-head">Preferred Faculties</div>
+              <div className="course-pref-head">Faculties To Avoid</div>
+
+              {selectedCodes.map((code) => (
+                <Fragment key={code}>
+                  <div className="course-pref-code">{code}</div>
+
+                  <div className="faculty-option-list">
+                    {(facultyOptionsByCourse[code] || []).map((faculty) => (
+                      <label
+                        key={`${code}-preferred-${faculty}`}
+                        className={`faculty-option-item ${(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty) ? "is-preferred" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={(facultyPrefsByCourse[code]?.preferredList || []).includes(faculty)}
+                          onChange={() => toggleFacultyPreference(code, "preferredList", faculty)}
+                        />
+                        <span>{faculty}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="faculty-option-list">
+                    {(facultyOptionsByCourse[code] || []).map((faculty) => (
+                      <label
+                        key={`${code}-avoid-${faculty}`}
+                        className={`faculty-option-item ${(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty) ? "is-avoided" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={(facultyPrefsByCourse[code]?.avoidList || []).includes(faculty)}
+                          onChange={() => toggleFacultyPreference(code, "avoidList", faculty)}
+                        />
+                        <span>{faculty}</span>
+                      </label>
+                    ))}
+                  </div>
+                </Fragment>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <h2>Scheduling Settings</h2>
+          <div className="sub-panel day-selector-panel">
+            <h3>Preferred Class Days</h3>
+            <div className="day-toggle-bar">
+              {DAY_ORDER.map((day) => {
+                const enabled = allowedDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    className={`day-toggle ${enabled ? "is-selected" : ""}`}
+                    onClick={() => toggleAllowedDay(day)}
+                  >
+                    {day.slice(0, 3)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="settings-grid">
+            <label>
+              Max Days Per Week
+              <input type="number" min="1" max="7" value={maxDaysPerWeek} onChange={(event) => setMaxDaysPerWeek(Number(event.target.value || 1))} />
+            </label>
+
+            <label>
+              Priority
+              <select value={priority} onChange={(event) => setPriority(event.target.value)}>
+                <option value="MIN_DAYS">Minimum Days</option>
+                <option value="MIN_DAILY_HOURS">Minimum Daily Hours</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="sub-panel">
+            <h3>Ignored Time Slots</h3>
+            <div className="ignored-slot-grid">
+              {TIME_SLOTS.map((slot) => {
+                const isSelected = ignoredSlotLabels.includes(slot.label);
+                return (
+                  <button
+                    key={slot.label}
+                    type="button"
+                    className={`ignored-slot-toggle ${isSelected ? "is-selected" : ""}`}
+                    onClick={() => toggleIgnoredSlot(slot.label)}
+                  >
+                    {slot.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="hint-text">8 tar class asholei korba?</p>
+          </div>
+
+          <div className="sub-panel">
+            <h3>Section Availability</h3>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={ignoreFilledSections}
+                onChange={(event) => setIgnoreFilledSections(event.target.checked)}
+              />
+              Ignore filled sections
+            </label>
+          </div>
+
+          <div className="sub-panel">
+            <h3>Break Preference</h3>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={preferBreaks} onChange={(event) => setPreferBreaks(event.target.checked)} />
+              Prefer routines with breaks between consecutive classes
+            </label>
+            <p className="hint-text">Quiz er age pora lage bhai.</p>
+          </div>
+
+          <button className="generate-button" type="button" disabled={selectedCodes.length === 0 || isGenerating} onClick={generateRoutine}>
+            {isGenerating ? "Generating..." : "Generate Routine"}
+          </button>
+        </section>
+      </div>
 
       {errorMessage && <div className="error-banner">{errorMessage}</div>}
 
