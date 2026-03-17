@@ -14,6 +14,36 @@ const TIME_SLOTS = [
   { label: "05:00 PM-06:20 PM", startTime: "17:00:00", endTime: "18:20:00" },
 ];
 
+const QUOTES = [
+  "It's dangerous to go alone, take this semester seriously.",
+  "Finish the fight.",
+  "Hard work is the real power-up.",
+  "Every season is exam season. Prepare accordingly.",
+  "You were born to be the very best, like no one ever was.",
+  "Failure doesn't mean defeat, just a checkpoint.",
+  "The cake may be a lie, but your potential isn't.",
+  "The only choice you have is how good you WILL do in your test. We always have a choice. Make the right choice.",
+  "Even the smallest person can change the course of CGPA.",
+  "Believe in the me that believes in you!",
+  "You have the power to rewrite your story.",
+  "Study. Rest. Sir ek mark dile grade bare. Repeat.",
+  "No matter the odds, you keep going. That's your superpower.",
+  "Academic success is forged in fire and coffee.",
+  "The Force will be with you, always.",
+  "You can do this all day.",
+  "Not all those who wander are lost, some are just changing majors.",
+  "Push the payload. Pass the semester.",
+  "A hero is someone who gets up, even when CGPA says no.",
+  "Nothing is true, everything is permitted, except plag.",
+  "You don't need a Senzu bean. You just need a plan.",
+  "When life gives you fetch quests, turn them into achievements.",
+  "FUS RO PASS!",
+  "You are more than your save files.",
+  "This semester... we ride.",
+  "SHINZOU WO SASAGEYO",
+  "Tatakae.",
+];
+
 function toMinutes(value) {
   if (!value) return 0;
   const [hours, minutes] = value.split(":").map(Number);
@@ -245,12 +275,14 @@ function App() {
   const [routineStats, setRoutineStats] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState("");
+  const [quoteIndex, setQuoteIndex] = useState(0);
   const [sourceLastUpdated, setSourceLastUpdated] = useState(null);
   const [backendLastCheckedAt, setBackendLastCheckedAt] = useState(null);
   const [downloadingRoutineKey, setDownloadingRoutineKey] = useState("");
   const routineCardRefs = useRef({});
   const resultsPanelRef = useRef(null);
   const shouldScrollAfterPageChangeRef = useRef(false);
+  const lastQuoteBackendCheckRef = useRef(null);
 
   useEffect(() => {
     async function fetchCourseCodes() {
@@ -271,6 +303,24 @@ function App() {
   useEffect(() => {
     document.title = "Routiner Khichuri";
   }, []);
+
+  useEffect(() => {
+    if (!backendLastCheckedAt) {
+      return;
+    }
+
+    if (!lastQuoteBackendCheckRef.current) {
+      lastQuoteBackendCheckRef.current = backendLastCheckedAt;
+      return;
+    }
+
+    if (lastQuoteBackendCheckRef.current === backendLastCheckedAt) {
+      return;
+    }
+
+    lastQuoteBackendCheckRef.current = backendLastCheckedAt;
+    setQuoteIndex((previous) => (previous + 1) % QUOTES.length);
+  }, [backendLastCheckedAt]);
 
   useEffect(() => {
     const VISIBLE_INTERVAL_MS = 15000;
@@ -1087,6 +1137,37 @@ function App() {
 
         {renderPaginationControls("results-pagination-bottom")}
       </section>
+
+      <footer className="app-footer">
+        <div className="footer-left">
+          <p className="footer-credit">Built by Dihan Islam Dhrubo</p>
+
+          <div className="footer-links">
+            <a href="https://github.com/xDhruboVai/Routiner-Khichuri" target="_blank" rel="noreferrer">
+              GitHub Repo
+            </a>
+            <a href="https://www.linkedin.com/in/dihan-islam-dhrubo-79a904249/" target="_blank" rel="noreferrer">
+              LinkedIn
+            </a>
+            <a href="https://www.facebook.com/dihanislam.dhrubo.5/" target="_blank" rel="noreferrer">
+              Facebook
+            </a>
+          </div>
+
+          <div className="footer-links footer-secondary-links">
+            <a
+              href="#"
+              onClick={(event) => {
+                event.preventDefault();
+              }}
+            >
+              Suggest / Report 
+            </a>
+          </div>
+        </div>
+
+        <p className="footer-quote">"{QUOTES[quoteIndex]}"</p>
+      </footer>
     </div>
   );
 }

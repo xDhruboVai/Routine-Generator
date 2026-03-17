@@ -913,6 +913,66 @@
   font-style: italic;
 }
 
+.app-footer {
+  margin-top: 16px;
+  border-radius: 14px;
+  border: 1px solid #9cb8d8;
+  background: linear-gradient(120deg, #12366f 0%, #1a4e8e 40%, #2f7aa8 100%);
+  color: #eef6ff;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-credit {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.footer-links a {
+  color: #d8ecff;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.footer-links a:hover {
+  color: #ffffff;
+  border-bottom-color: rgba(255, 255, 255, 0.72);
+}
+
+.footer-secondary-links a {
+  font-size: 0.88rem;
+  opacity: 0.95;
+}
+
+.footer-quote {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  text-align: right;
+  max-width: 420px;
+  color: #ffffff;
+}
+
 @keyframes floatWaveA {
   0%,
   100% {
@@ -1001,6 +1061,15 @@
 
   .calendar-legend {
     flex-direction: column;
+  }
+
+  .app-footer {
+    flex-direction: column;
+  }
+
+  .footer-quote {
+    text-align: left;
+    max-width: none;
   }
 }
 
